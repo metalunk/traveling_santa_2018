@@ -6,5 +6,3 @@ https://www.kaggle.com/c/traveling-santa-2018-prime-paths
 ## Thanks
 
 Code under models dir are based on a public kernel https://www.kaggle.com/andresionek/object-oriented-santa-s-route-concorde-solver
-
-This guy implemented well defined object orient classes of city, world, route.
