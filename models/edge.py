@@ -11,6 +11,6 @@ class Edge:
         return self.get_edge_cost(self.idx, self.first_city, self.second_city)
 
     @staticmethod
-    def get_edge_cost(idx: int, first_city: City, second_city: City):
+    def get_edge_cost(idx: int, first_city: City, second_city: City) -> float:
         d = City.distance(first_city, second_city)
-        return d + d * 0.1 * (((idx + 1) % 10 == 0) and not first_city.is_prime)
+        return d * (1.0 + 0.1 * int((idx + 1) % 10 == 0) * int(not first_city.is_prime))

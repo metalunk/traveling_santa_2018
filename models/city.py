@@ -5,24 +5,30 @@ import pandas as pd
 
 
 class City:
-    def __init__(self, city_id, x, y):
-        self.x = x
-        self.y = y
-        self.id = city_id
-        self.is_prime = self._check_prime()
+    def __init__(self, city_id, x, y, prime_cities: List[bool]):
+        self.x: float = float(x)
+        self.y: float = float(y)
+        self.id: int = int(city_id)
+
+        self.is_prime = self._is_prime(prime_cities)
         self.neighbors = self._get_neighbors()
         self.neighbor_primes = self._get_neighbor_primes()
 
-    def _check_prime(self):
-        """
-        Checks if a city is prime
-        """
-        if self.id < 2:
-            return False
-        for i in range(2, int(math.sqrt(self.id)) + 1, 2):
-            if self.id % i == 0:
-                return False
-        return True
+    @staticmethod
+    def sieve_of_eratosthenes(n: int):
+        primes = [True for i in range(n + 1)]  # Start assuming all numbers are primes
+        primes[0] = False  # 0 is not a prime
+        primes[1] = False  # 1 is not a prime
+        for i in range(2, int(math.sqrt(n)) + 1):
+            if primes[i]:
+                k = 2
+                while i * k <= n:
+                    primes[i * k] = False
+                    k += 1
+        return primes
+
+    def _is_prime(self, prime_cities: List):
+        return prime_cities[self.id]
 
     def get_coord(self):
         return self.x, self.y
@@ -43,7 +49,9 @@ class City:
     @staticmethod
     def load_from_csv(cities_path='data/cities.csv') -> List['City']:
         df = pd.read_csv(cities_path)
-        city_list = [City(l['CityId'], l['X'], l['Y']) for _, l in df.iterrows()]
+
+        prime_cities = City.sieve_of_eratosthenes(max(df.CityId))
+        city_list = [City(l['CityId'], l['X'], l['Y'], prime_cities) for _, l in df.iterrows()]
         return city_list
 
     def __repr__(self):
