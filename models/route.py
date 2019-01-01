@@ -19,20 +19,18 @@ class Route:
         self.stops: List[City] = stops
 
     def size(self):
-        """
-        Calculates the number of stops in the path
-        """
         return len(self.stops)
 
     def cost(self):
-        """
-        Calculates the Path Cost Function - penalized distance of the full path
-        """
+        return self.cost_of_path(self.stops + [self.stops[0]], 0)
+
+    @staticmethod
+    def cost_of_path(path: List[City], first_idx: int):
         cost = 0
-        for idx, cur_stop in enumerate(self.stops):
-            next_stop = (idx + 1) % self.size()
-            cost += Edge.get_edge_cost(idx, cur_stop, self.stops[next_stop])
-        return cost
+        for i, cur_stop in enumerate(path):
+            if i + 1 >= len(path):
+                return cost
+            cost += Edge.get_edge_cost(i + first_idx, cur_stop, path[i + 1])
 
     def get_tenth_steps(self):
         """
@@ -50,14 +48,30 @@ class Route:
         if edge_a.idx + 1 >= edge_b.idx:
             return
 
-        swapped_edge_a = Edge(edge_a.idx, edge_a.first_city, edge_b.first_city)
-        swapped_edge_b = Edge(edge_b.idx, edge_a.second_city, edge_b.first_city)
-        if swapped_edge_a.cost() + swapped_edge_b.cost() > edge_a.cost() + edge_b.cost():
-            return
+        swapped_subpath = self.get_swapped_subpath(edge_a, edge_b)
 
-        tmp = self.stops[edge_a.idx + 1:edge_b.idx + 1]
-        for i in range(edge_a.idx + 1, edge_b.idx + 1):
-            self.stops[i] = tmp.pop()
+        if self.cost_of_path(swapped_subpath, edge_a.idx) \
+                <= self.cost_of_path(self.get_subpath(edge_a.idx, edge_b.idx + 1), edge_a.idx):
+            self.replace(edge_a.idx, swapped_subpath)
+
+    def replace(self, from_idx: int, subpath: List[City]) -> None:
+        for i in range(len(subpath)):
+            self.stops[(from_idx + i) % len(self.stops)] = subpath.pop(0)
+
+    def get_swapped_subpath(self, edge_a: Edge, edge_b: Edge) -> List[City]:
+        swapped_subpath = [edge_a.first_city]
+        tmp = self.get_subpath(edge_a.idx + 1, edge_b.idx)
+        tmp.reverse()
+        swapped_subpath += tmp
+        swapped_subpath.append(edge_b.second_city)
+        return swapped_subpath
+
+    def get_subpath(self, from_: int, to: int):
+        if to == len(self.stops):
+            return self.stops[from_:to] + [self.stops[0]]
+        elif to > len(self.stops):
+            raise IndexError('Invalid index is given')
+        return self.stops[from_:to + 1]
 
     def solve_by_concorde(self, time: float):
         """
