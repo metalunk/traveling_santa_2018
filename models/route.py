@@ -1,22 +1,54 @@
 import io
 import base64
+import os
+import pickle
+
 import numpy as np
 import pylab as pl
 import matplotlib.animation as animation
 import matplotlib.pyplot as plt
-from typing import List
+from typing import List, Dict
 from matplotlib import collections as mc
 from concorde.tsp import TSPSolver
 from IPython.display import HTML
 
-from models.city import City
+from models.city import City, AreaMap
 from models.edge import Edge
 
 
 class Route:
-    def __init__(self, stops):
+    def __init__(self, stops: List[City], area_map: AreaMap):
         # List of City
         self.stops: List[City] = stops
+        # Dict of city_id -> index
+        self.city_to_idx: Dict[int, int] = self.initialize_city_to_idx(self.stops)
+
+        self.area_map: AreaMap = area_map
+
+    @staticmethod
+    def initialize():
+        cities = City.load_from_csv()
+
+        area_map_path = 'data/area_map.pkl'
+        if os.path.exists(area_map_path):
+            print('Loading area_map from pkl.')
+            with open(area_map_path, 'rb') as f:
+                area_map = pickle.load(f)
+        else:
+            print('Creating area map.')
+            area_map = AreaMap(cities)
+            with open(area_map_path, 'wb') as f:
+                pickle.dump(area_map, f)
+
+        return Route(cities, area_map)
+
+    @staticmethod
+    def initialize_city_to_idx(stops: List[City]) -> Dict[int, int]:
+        print('Creating city_to_idx.')
+        city_to_idx = {}
+        for i, stop in enumerate(stops):
+            city_to_idx[stop.id] = i
+        return city_to_idx
 
     def size(self):
         return len(self.stops)
@@ -24,8 +56,32 @@ class Route:
     def cost(self):
         return self.cost_of_path(self.stops + [self.stops[0]], 0)
 
+    def get_city(self, idx: int) -> City:
+        if idx < self.size():
+            return self.stops[idx]
+        elif idx == self.size():
+            return self.stops[0]
+        else:
+            raise IndexError('Index of stops out of range.')
+
+    def get_subpath(self, from_: int, to: int) -> List[City]:
+        if to < self.size():
+            return self.stops[from_:to + 1]
+        elif to == self.size():
+            return self.stops[from_:to] + [self.stops[0]]
+        else:
+            raise IndexError('Index of stops out of range.')
+
+    def replace_city(self, idx: int, city: City) -> None:
+        if idx < self.size():
+            self.stops[idx] = city
+        elif idx == self.size():
+            self.stops[0] = city
+        else:
+            raise IndexError('Index of stops out of range.')
+
     @staticmethod
-    def cost_of_path(path: List[City], first_idx: int):
+    def cost_of_path(path: List[City], first_idx: int) -> float:
         cost = 0
         for i, cur_stop in enumerate(path):
             if i + 1 >= len(path):
@@ -38,25 +94,59 @@ class Route:
         """
         return [c for s, c in enumerate(self.stops) if (s + 1) % 10 == 0]
 
-    def swap_if_better(self, edge_a: Edge, edge_b: Edge):
+    def improve_9th(self):
+        for i in range(self.size()):
+            idx = i + 1
+            if idx % 10 == 9:
+                city = self.get_city(i)
+                neighbor_primes = city.get_neighbor_primes(self.area_map)
+                self.try_swap(idx, neighbor_primes)
+
+    def try_swap(self, idx: int, cities: List[City]) -> None:
+        best_diff = 0
+        best_subpath = None
+        for city in cities:
+            target_idx = self.city_to_idx[city.id]
+            edge_a = Edge(idx - 1, self.get_city(idx - 1), self.get_city(idx))
+            edge_b = Edge(target_idx, self.get_city(target_idx), self.get_city(target_idx + 1))
+            swapped_subpath, diff = self.calc_swap(edge_a, edge_b)
+
+            if diff is not None and diff < best_diff:
+                best_diff = diff
+                best_subpath = swapped_subpath
+
+        if best_subpath is not None:
+            # if round(previous_cost + best_diff, 3) != round(self.cost(), 3):
+            #     raise RuntimeError('Bug is hidden.')
+            print('Swapping idx: {}, improving {}'.format(idx, best_diff))
+            self.replace_subpath(idx - 1, best_subpath)
+
+    def calc_swap(self, edge_a: Edge, edge_b: Edge):
+        """
+        :param edge_a:
+        :param edge_b:
+        :return: (subpath, diff)
+            diff: smaller is better
+        """
+        # Currently I don't implement former swap
         if edge_a.idx > edge_b.idx:
-            tmp = edge_b
-            edge_b = edge_a
-            edge_a = tmp
+            return [], None
 
         # Currently I don't implement too close swap
         if edge_a.idx + 1 >= edge_b.idx:
-            return
+            return [], None
 
         swapped_subpath = self.get_swapped_subpath(edge_a, edge_b)
+        diff = self.cost_of_path(swapped_subpath, edge_a.idx) \
+               - self.cost_of_path(self.get_subpath(edge_a.idx, edge_b.idx + 1), edge_a.idx)
 
-        if self.cost_of_path(swapped_subpath, edge_a.idx) \
-                <= self.cost_of_path(self.get_subpath(edge_a.idx, edge_b.idx + 1), edge_a.idx):
-            self.replace(edge_a.idx, swapped_subpath)
+        return swapped_subpath, diff
 
-    def replace(self, from_idx: int, subpath: List[City]) -> None:
+    def replace_subpath(self, from_idx: int, subpath: List[City]) -> None:
         for i in range(len(subpath)):
-            self.stops[(from_idx + i) % len(self.stops)] = subpath.pop(0)
+            city = subpath.pop(0)
+            self.replace_city(from_idx + i, city)
+            self.city_to_idx[city.id] = from_idx + i
 
     def get_swapped_subpath(self, edge_a: Edge, edge_b: Edge) -> List[City]:
         swapped_subpath = [edge_a.first_city]
@@ -65,13 +155,6 @@ class Route:
         swapped_subpath += tmp
         swapped_subpath.append(edge_b.second_city)
         return swapped_subpath
-
-    def get_subpath(self, from_: int, to: int):
-        if to == len(self.stops):
-            return self.stops[from_:to] + [self.stops[0]]
-        elif to > len(self.stops):
-            raise IndexError('Invalid index is given')
-        return self.stops[from_:to + 1]
 
     def solve_by_concorde(self, time: float):
         """
@@ -90,6 +173,7 @@ class Route:
         order = np.append(tour_data.tour, [0])
         new_route = [self.stops[i] for i in order]
         self.stops = new_route
+        self.city_to_idx = self.initialize_city_to_idx(self.stops)
 
     def plot(self, show_primes=False, show_10th_step=False, show_intersection=False):
         """
