@@ -1,9 +1,9 @@
 import math
-import os
-import pickle
 from typing import List, Dict
 
 import pandas as pd
+
+from helper import load_from_pickle
 
 
 class City:
@@ -64,14 +64,8 @@ class City:
         print('Loading cities from CSV.')
         df = pd.read_csv(cities_path)
 
-        if os.path.exists(prime_numbers_path):
-            with open(prime_numbers_path, 'rb') as f:
-                prime_numbers = pickle.load(f)
-        else:
-            print('Finding prime numbers.')
-            prime_numbers = City.sieve_of_eratosthenes(max(df.CityId))
-            with open(prime_numbers_path, 'wb') as f:
-                pickle.dump(prime_numbers, f)
+        print('Loading prime numbers.')
+        prime_numbers = load_from_pickle(prime_numbers_path, lambda: City.sieve_of_eratosthenes(max(df.CityId)))
 
         print('Generating City objects.')
         city_list = [City(l['CityId'], l['X'], l['Y'], prime_numbers) for _, l in df.iterrows()]
@@ -127,6 +121,7 @@ class AreaMap:
         return area_id
 
     def get_neighbors(self, city: City, limit, only_prime: bool = False) -> List[City]:
+        # todo: Use KDTree instead of this
         center_area_id = self._get_area_id(city)
         neighbor_cities = self.area_map[center_area_id]
         if only_prime:

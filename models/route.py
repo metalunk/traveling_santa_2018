@@ -1,7 +1,5 @@
 import io
 import base64
-import os
-import pickle
 
 import numpy as np
 import pylab as pl
@@ -12,6 +10,7 @@ from matplotlib import collections as mc
 from concorde.tsp import TSPSolver
 from IPython.display import HTML
 
+from helper import load_from_pickle
 from models.city import City, AreaMap
 from models.edge import Edge
 
@@ -28,18 +27,7 @@ class Route:
     @staticmethod
     def initialize():
         cities = City.load_from_csv()
-
-        area_map_path = 'data/area_map.pkl'
-        if os.path.exists(area_map_path):
-            print('Loading area_map from pkl.')
-            with open(area_map_path, 'rb') as f:
-                area_map = pickle.load(f)
-        else:
-            print('Creating area map.')
-            area_map = AreaMap(cities)
-            with open(area_map_path, 'wb') as f:
-                pickle.dump(area_map, f)
-
+        area_map: AreaMap = load_from_pickle('data/area_map.pkl', lambda: AreaMap(cities))
         return Route(cities, area_map)
 
     @staticmethod
@@ -49,6 +37,14 @@ class Route:
         for i, stop in enumerate(stops):
             city_to_idx[stop.id] = i
         return city_to_idx
+
+    def load_submission(self, submission: List[int]) -> None:
+        new_stops = []
+        for c in submission:
+            idx = self.city_to_idx[c]
+            new_stops.append(self.stops[idx])
+        self.stops = new_stops
+        self.city_to_idx = self.initialize_city_to_idx(self.stops)
 
     def size(self):
         return len(self.stops)
