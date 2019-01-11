@@ -1,11 +1,11 @@
-from models.city import City, AreaMap
+from models.city import City, Neighbors
 from models.route import Route
 
 
 def test_try_swap():
     cities = City.load_from_csv('data/sample_cities.csv')
-    area_map = AreaMap(cities)
-    route = Route(cities, area_map)
+    neighbors = Neighbors(cities)
+    route = Route(cities, neighbors)
 
     assert round(route.cost(), 3) == 4.828
 

@@ -1,7 +1,8 @@
 import math
-from typing import List, Dict
+from typing import List
 
 import pandas as pd
+from sklearn.neighbors import KDTree
 
 from helper import load_from_pickle
 
@@ -35,23 +36,6 @@ class City:
     def get_coord(self):
         return self.x, self.y
 
-    N_NEIGHBORS = 5
-    N_NEIGHBOR_PRIMES = 5
-
-    def get_neighbors(self, area_map: 'AreaMap') -> List['City']:
-        if self.neighbors is not None:
-            return self.neighbors
-
-        self.neighbors = area_map.get_neighbors(self, self.N_NEIGHBORS, only_prime=False)
-        return self.neighbors
-
-    def get_neighbor_primes(self, area_map: 'AreaMap') -> List['City']:
-        if self.neighbor_primes is not None:
-            return self.neighbor_primes
-
-        self.neighbor_primes = area_map.get_neighbors(self, self.N_NEIGHBOR_PRIMES, only_prime=True)
-        return self.neighbor_primes
-
     @staticmethod
     def distance(a: 'City', b: 'City') -> float:
         """
@@ -80,60 +64,20 @@ class City:
         return fmt_str.format(self.id, self.get_coord(), self.is_prime)
 
 
-class AreaMap:
-    # These numbers are specific to cities.csv
-    X_MIN = 1.87192466558405
-    X_MAX = 5099.50214180651
-    Y_MIN = 0.0
-    Y_MAX = 3397.80982412656
-    N_DIVISION = 50
+class Neighbors:
+    N_NEIGHBOR = 10
 
-    def __init__(self, cities: List[City], x_min=X_MIN, x_max=X_MAX, y_min=Y_MIN, y_max=Y_MAX, n_division=N_DIVISION):
-        self.x_min: float = x_min
-        self.x_max: float = x_max
-        self.y_min: float = y_min
-        self.y_max: float = y_max
-        self.n_division: int = n_division
-        self.area_map: Dict[int, List[City]] = self._make_area_map(cities)
-
-    def _make_area_map(self, cities: List[City]) -> Dict[int, List[City]]:
-        area_map = {}
-        for i in range(int(math.pow(self.n_division + 1, 2))):
-            area_map[i] = []
-
+    def __init__(self, cities: List[City], n_neighbor=N_NEIGHBOR):
+        """
+        :param cities: This should be sorted by city_id
+        """
+        XY = []
         for city in cities:
-            area_id = self._get_area_id(city)
-            area_map[area_id].append(city)
+            XY.append((city.x, city.y))
+        self.kdt = KDTree(XY)
 
-        return area_map
+        k = n_neighbor + 1
+        self.idx_list = self.kdt.query(XY, k=k, return_distance=False)[:, 1:]
 
-    def _get_area_id(self, city: City) -> int:
-        x_width = (self.x_max - self.x_min) / self.n_division
-        y_width = (self.y_max - self.y_min) / self.n_division
-
-        x_i = int(math.floor(city.x / x_width))
-        y_i = int(math.floor(city.y / y_width))
-
-        if x_i > self.n_division or y_i > self.n_division:
-            raise RuntimeError('Invalid area_id.')
-
-        area_id = x_i * self.n_division + y_i
-        return area_id
-
-    def get_neighbors(self, city: City, limit, only_prime: bool = False) -> List[City]:
-        # todo: Use KDTree instead of this
-        center_area_id = self._get_area_id(city)
-        neighbor_cities = self.area_map[center_area_id]
-        if only_prime:
-            neighbor_primes = []
-            for c in neighbor_cities:
-                if c.is_prime:
-                    neighbor_primes.append(c)
-            neighbor_cities = neighbor_primes
-
-        if len(neighbor_cities) < limit:
-            # raise RuntimeError('Not enough neighbors')
-            pass
-
-        neighbor_cities.sort(key=lambda x: City.distance(x, city))
-        return neighbor_cities[:limit]
+    def get_neighbors(self, city_id: int) -> List[int]:
+        return self.idx_list[city_id].tolist()

@@ -10,25 +10,24 @@ from matplotlib import collections as mc
 from concorde.tsp import TSPSolver
 from IPython.display import HTML
 
-from helper import load_from_pickle
-from models.city import City, AreaMap
+from models.city import City, Neighbors
 from models.edge import Edge
 
 
 class Route:
-    def __init__(self, stops: List[City], area_map: AreaMap):
+    def __init__(self, stops: List[City], neighbors: Neighbors):
         # List of City
         self.stops: List[City] = stops
         # Dict of city_id -> index
         self.city_to_idx: Dict[int, int] = self.initialize_city_to_idx(self.stops)
 
-        self.area_map: AreaMap = area_map
+        self.neighbors: Neighbors = neighbors
 
     @staticmethod
     def initialize():
         cities = City.load_from_csv()
-        area_map: AreaMap = load_from_pickle('data/area_map.pkl', lambda: AreaMap(cities))
-        return Route(cities, area_map)
+        neighbors = Neighbors(cities, n_neighbor=50)
+        return Route(cities, neighbors)
 
     @staticmethod
     def initialize_city_to_idx(stops: List[City]) -> Dict[int, int]:
@@ -90,13 +89,29 @@ class Route:
         """
         return [c for s, c in enumerate(self.stops) if (s + 1) % 10 == 0]
 
+    def _get_neighbor_cities(self, city: City, filter_prime: bool) -> List[City]:
+        neighbor_ids = self.neighbors.get_neighbors(city.id)
+        neighbor_primes = []
+        for id_ in neighbor_ids:
+            city = self.stops[self.city_to_idx[id_]]
+            if not filter_prime or city.is_prime:
+                neighbor_primes.append(city)
+        return neighbor_primes
+
     def improve_9th(self):
         for i in range(self.size()):
             idx = i + 1
             if idx % 10 == 9:
                 city = self.get_city(i)
-                neighbor_primes = city.get_neighbor_primes(self.area_map)
-                self.try_swap(idx, neighbor_primes)
+                neighbor_cities = self._get_neighbor_cities(city, filter_prime=True)
+                self.try_swap(idx, neighbor_cities)
+
+    def improve_one_by_one(self):
+        for i in range(self.size()):
+            idx = i + 1
+            city = self.get_city(i)
+            neighbor_cities = self._get_neighbor_cities(city, filter_prime=False)
+            self.try_swap(idx, neighbor_cities)
 
     def try_swap(self, idx: int, cities: List[City]) -> None:
         best_diff = 0
